@@ -1,0 +1,5 @@
+(fp_lib_table
+  (lib (name "teensy")(type "KiCad")(uri "C:/Users/maksym/source/repos/Dohle/lib/Teensy/teensy.pretty")(options "")(descr ""))
+  (lib (name "footprints")(type "KiCad")(uri "C:/Users/maksym/source/repos/Dohle/Dohle Ray v2/footprints.pretty")(options "")(descr ""))
+  (lib (name "SamacSys_Parts")(type "KiCad")(uri "C:/Users/maksym/source/repos/Dohle/lib/SamacSys_Parts.pretty")(options "")(descr ""))
+)
