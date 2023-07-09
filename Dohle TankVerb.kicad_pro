@@ -45,7 +45,7 @@
         "silk_text_upright": false,
         "zones": {
           "45_degree_only": false,
-          "min_clearance": 0.508
+          "min_clearance": 0.35
         }
       },
       "diff_pair_dimensions": [
@@ -58,6 +58,7 @@
       "drc_exclusions": [
         "clearance|156274000|124560000|dca65665-9cce-4680-b74d-4392f96fb4fc|5aa70afc-f46c-4b78-9256-3046d90493be",
         "courtyards_overlap|140378509|130895231|ce4c7a9e-ca50-478f-82e7-f45e17fb05ea|dde3dba8-1b81-466c-93a3-c284ff4da1ef",
+        "courtyards_overlap|140390999|130768194|ce4c7a9e-ca50-478f-82e7-f45e17fb05ea|dde3dba8-1b81-466c-93a3-c284ff4da1ef",
         "courtyards_overlap|140390999|130832212|ce4c7a9e-ca50-478f-82e7-f45e17fb05ea|dde3dba8-1b81-466c-93a3-c284ff4da1ef",
         "courtyards_overlap|150850001|57017863|a2308f1e-71dd-4a0f-997d-7149557a9cae|65086639-65bd-424a-9186-02e953a935f8",
         "courtyards_overlap|155584001|124110001|9b5541bd-6969-44aa-94d7-fe8e9a0dfa35|ce4c7a9e-ca50-478f-82e7-f45e17fb05ea"
