@@ -30,6 +30,15 @@
 *.exe
 *.out
 *.app
+*.hex
+*.bin
 
-# Visual Studio garbage
-*/.vs/*
+# IDE
+src/.pio
+src/.vscode/.browse.c_cpp.db*
+src/.vscode/c_cpp_properties.json
+src/.vscode/launch.json
+src/.vscode/ipch
+
+# Others
+*.zip
