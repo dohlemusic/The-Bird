@@ -2,10 +2,10 @@
 #include <DaisyDSP.h>
 #include <AudioClass.h>
 
+#include "filters/AntiJitterFilter.h"
+#include "filters/ButterworthLPF.h"
 #include "TankVerb.h"
-#include "AntiJitterFilter.h"
 #include "FootSwitch.h"
-#include "so_butterworth_lpf.h"
 
 constexpr float maxCutoffFrequency = 20000.f;
 constexpr float minCutoffFrequency = 500.f;
@@ -67,26 +67,27 @@ void loop()
 {
 	footSwitch.update();
 	digitalWrite(LED_PIN, footSwitch.getToggleState());
+	float expression = analogRead(A6) / resolutionScaleFactor;
 
 	tankVerb.setGain(analogRead(A0) / (0.9f * resolutionScaleFactor));
 
 	auto filteredRoomSize = kKnobRoomSizeSmoothing.update(analogRead(A1) / resolutionScaleFactor);
 	filteredRoomSize = kKnobRoomSizeAntiJitter.update(filteredRoomSize);
 
-	float frequency = analogRead(A3) / resolutionScaleFactor;
+	float frequency = linToExp(analogRead(A3) / resolutionScaleFactor);
 	frequency = kKnobFrequencySmoothing.update(frequency);
 	frequency = kKnobFrequencyAntiJitter.update(frequency) * maxCutoffFrequency + minCutoffFrequency;
 	tankVerb.setCutoff(frequency);
 
 	const float length = linToExp(filteredRoomSize) * MAX_DELAY_LENGTH + AUDIO_BLOCK_SIZE;
 	tankVerb.setLength(length);
-	//Serial.println(length);
+	Serial.println(length);
 
-	//Serial.print(",");
+	Serial.print(",");
 
 	auto filteredSpread = kKnobSpreadSmoothing.update(analogRead(A2) / resolutionScaleFactor);
 	filteredSpread = kKnobSpreadAntiJitter.update(filteredSpread);
-	//Serial.print(filteredSpread*1000);
+	Serial.print(filteredSpread*1000);
 	tankVerb.setSpread(filteredSpread);
 	//Serial.println();
 

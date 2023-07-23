@@ -5,7 +5,7 @@
 * fc, corner frequency
 */
 #pragma once
-#include "filter_common.h"
+#include "FilterCommon.h"
 
 namespace DSPFilters
 {

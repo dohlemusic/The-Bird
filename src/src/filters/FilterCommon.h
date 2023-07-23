@@ -1,6 +1,6 @@
 #pragma once
 
-#include "biquad.h"
+#include "Biquad.h"
 #include <cmath>
 #include <functional>
 

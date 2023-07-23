@@ -1,15 +1,13 @@
 #pragma once
 #include <vector>
 
-#include "IIRLowPass.h"
-#include "MoogFilter.h"
 #include "RingBuffer.h"
-#include "so_butterworth_lpf.h"
+#include "filters/ButterworthLPF.h""
 
 static constexpr size_t AUDIO_BLOCK_SIZE = 480;
 static constexpr size_t NUM_DELAYS = 4;
 static constexpr size_t MAX_DELAY_LENGTH = 20000;
-inline float DSY_SDRAM_BSS kDelayBufferss[NUM_DELAYS][MAX_DELAY_LENGTH];
+inline float kDelayBufferss[NUM_DELAYS][MAX_DELAY_LENGTH];
 inline float kResamplingBuffer[MAX_DELAY_LENGTH + 1];
 
 template<class T>

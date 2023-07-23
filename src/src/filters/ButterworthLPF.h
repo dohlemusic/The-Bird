@@ -8,7 +8,7 @@
 * assume before peaking in the frequency response is observed.
 */
 #pragma once
-#include "biquad.h"
+#include "Biquad.h"
 #include <complex>
 #include <cmath>
 
