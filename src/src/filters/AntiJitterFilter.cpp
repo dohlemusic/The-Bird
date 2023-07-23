@@ -1,4 +1,4 @@
-#include "AntiJitterFilter.h"
+#include "filters/AntiJitterFilter.h"
 
 AntiJitterFilter::AntiJitterFilter(float threshold)
 {

@@ -1,11 +1,8 @@
 #pragma once
 
-#include "Biquad.h"
+#include "filters/Biquad.h"
 #include <cmath>
 #include <functional>
-
-#define COEFF_SIZE_DOUBLE
-//#define COEFF_SIZE_FLOAT
 
 #ifndef pi
 #define pi  3.1415926535897932384626433832795

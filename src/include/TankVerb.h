@@ -2,7 +2,7 @@
 #include <vector>
 
 #include "RingBuffer.h"
-#include "filters/ButterworthLPF.h""
+#include "filters/ButterworthLPF.h"
 
 static constexpr size_t AUDIO_BLOCK_SIZE = 480;
 static constexpr size_t NUM_DELAYS = 4;
