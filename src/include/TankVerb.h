@@ -5,11 +5,12 @@
 
 #include "filters/ButterworthLPF.h"
 
-static constexpr size_t AUDIO_BLOCK_SIZE = 480;
-static constexpr size_t NUM_DELAYS = 1;
-static constexpr size_t MAX_DELAY_LENGTH = 20000;
-float resizeInputBuffer[9600];
-float resizeOutputBuffer[9600];
+static constexpr size_t AUDIO_BLOCK_SIZE = 360;
+static constexpr size_t NUM_DELAYS = 4;
+static constexpr size_t MAX_DELAY_LENGTH = 16000;
+static constexpr size_t MAX_BUFFER_LENGTH = 4200;
+float resizeInputBuffer[MAX_BUFFER_LENGTH];
+float resizeOutputBuffer[MAX_BUFFER_LENGTH];
 
 // Fast tanh from https://varietyofsound.wordpress.com/2011/02/14/efficient-tanh-computation-using-lamberts-continued-fraction/
 inline float softClip(float sample)
@@ -52,8 +53,17 @@ public:
 	{
 		// rather than changing the actual delay line length, we just resample
 		// the input and output, simulating change of clock speed in BBD delay
-		size_t newSize = (MAX_DELAY_LENGTH / mNewLength) * blockSize;
+
+		size_t newSize = (MAX_DELAY_LENGTH / mNewLength) * blockSize;		
+		if(newSize >= MAX_BUFFER_LENGTH) {
+			newSize = MAX_BUFFER_LENGTH -1;
+		}
+		if(newSize < blockSize) {
+			newSize = blockSize;
+		}
+
 		resizeNearestNeighbor(input, blockSize, resizeInputBuffer, newSize);
+		Serial.print(newSize);
 
 		for(int i=0; i<newSize; ++i) {
 			float out = mFilter.update(softClip(mDelay.Read()));
@@ -108,7 +118,7 @@ public:
 			constexpr auto gain = 0.9f;
 			mDelays.emplace_back(MAX_DELAY_LENGTH, gain);
 		}
-		setLength(500);
+		setLength(MAX_DELAY_LENGTH);
 	}
 
 	void setNumDelays(unsigned int num_delays)

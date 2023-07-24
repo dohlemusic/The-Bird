@@ -17,7 +17,7 @@ PedalState currentState = PedalState::RUNNING;
 
 constexpr float maxCutoffFrequency = 20000.f;
 constexpr float minCutoffFrequency = 500.f;
-constexpr long refreshMs = 20;
+constexpr long refreshMs = 10;
 constexpr float refreshRate = 1.f / (refreshMs * 0.001f);
 constexpr float refreshPeriod = 1.f / refreshRate;
 constexpr long readResolution = 16;
