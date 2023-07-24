@@ -26,19 +26,19 @@ float lerp(float x, float x0, float x1, float y0, float y1)
 	return y0 + (x - x0) * ((y1 - y0) / (x1 - x0));
 }
 
-inline bool resizeNearestNeighbor(const float* current, size_t currentSize, float* out, size_t newSize, size_t offset = 0u)
+inline bool resizeNearestNeighbor(const float* current, size_t currentSize, float* out, size_t newSize)
 {
 	const float scaleFactor = static_cast<float>(currentSize) / static_cast<float>(newSize);
 	for (size_t outIdx = 0; outIdx < newSize; ++outIdx)
 	{
 		const float currentFractionalIdx = outIdx * scaleFactor;
 		const int currentIdx = static_cast<size_t>(currentFractionalIdx);
-		out[outIdx] = current[(currentIdx + offset) % currentSize]; // lerp(currentFractionalIdx, currentIdx, currentIdx + 1, current[currentIdx], current[currentIdx + 1]);
+		out[outIdx] = lerp(currentFractionalIdx, currentIdx, currentIdx + 1, current[currentIdx], current[currentIdx + 1]); // current[currentIdx]; 
 	}
 	return true;
 }
 
-class BucketBrigadeDelay
+class BucketBrigadeDelay 
 {
 public:
 	BucketBrigadeDelay(float length, float gain)
