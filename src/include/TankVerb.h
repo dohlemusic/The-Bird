@@ -1,20 +1,15 @@
 #pragma once
 #include <vector>
 
-#include "RingBuffer.h"
+#include <DaisyDSP.h>
+
 #include "filters/ButterworthLPF.h"
 
 static constexpr size_t AUDIO_BLOCK_SIZE = 480;
-static constexpr size_t NUM_DELAYS = 4;
+static constexpr size_t NUM_DELAYS = 1;
 static constexpr size_t MAX_DELAY_LENGTH = 20000;
-inline float kDelayBufferss[NUM_DELAYS][MAX_DELAY_LENGTH];
-inline float kResamplingBuffer[MAX_DELAY_LENGTH + 1];
-
-template<class T>
-constexpr const T& clamp(const T& v, const T& lo, const T& hi)
-{
-	return v <= lo ? lo : v >= hi ? hi : v;
-}
+float resizeInputBuffer[9600];
+float resizeOutputBuffer[9600];
 
 // Fast tanh from https://varietyofsound.wordpress.com/2011/02/14/efficient-tanh-computation-using-lamberts-continued-fraction/
 inline float softClip(float sample)
@@ -25,33 +20,49 @@ inline float softClip(float sample)
 	return a / b;
 }
 
+float lerp(float x, float x0, float x1, float y0, float y1)
+{
+	return y0 + (x - x0) * ((y1 - y0) / (x1 - x0));
+}
 
-class Delay
+inline bool resizeNearestNeighbor(const float* current, size_t currentSize, float* out, size_t newSize, size_t offset = 0u)
+{
+	const float scaleFactor = static_cast<float>(currentSize) / static_cast<float>(newSize);
+	for (size_t outIdx = 0; outIdx < newSize; ++outIdx)
+	{
+		const float currentFractionalIdx = outIdx * scaleFactor;
+		const int currentIdx = static_cast<size_t>(currentFractionalIdx);
+		out[outIdx] = current[(currentIdx + offset) % currentSize]; // lerp(currentFractionalIdx, currentIdx, currentIdx + 1, current[currentIdx], current[currentIdx + 1]);
+	}
+	return true;
+}
+
+class BucketBrigadeDelay
 {
 public:
-	Delay(unsigned int index, float maxLength, float gain, float* resamplingBuffer) :
-		mBuffer(RingBuffer(kDelayBufferss[index], resamplingBuffer, static_cast<size_t>(maxLength + 1)))
+	BucketBrigadeDelay(float length, float gain)
 	{
+		mDelay.Init();
 		setGain(gain);
-		setLength(maxLength);
+		setLength(length);
+		mDelay.SetDelay(MAX_DELAY_LENGTH);
 	}
 
 	void update(const float* input, float* output, size_t blockSize)
 	{
-		float tmp[AUDIO_BLOCK_SIZE + 1];
+		// rather than changing the actual delay line length, we just resample
+		// the input and output, simulating change of clock speed in BBD delay
+		size_t newSize = (MAX_DELAY_LENGTH / mNewLength) * blockSize;
+		resizeNearestNeighbor(input, blockSize, resizeInputBuffer, newSize);
 
-		mBuffer.get(tmp, AUDIO_BLOCK_SIZE + 1u, mOffset);
+		for(int i=0; i<newSize; ++i) {
+			float out = mFilter.update(softClip(mDelay.Read()));
+			mDelay.Write(resizeInputBuffer[i] + out * mGain);
+			float average = (resizeInputBuffer[i] + out) * .5f;
 
-		// feedback loop
-		for (size_t i = 0; i < blockSize; ++i)
-		{
-			const float left = tmp[i];
-			const float right = tmp[i + 1];
-			const float average = input[i] + mGain * mFilter.update((left + right) / 2.f);
-			output[i] = softClip(average);
+			resizeOutputBuffer[i] = average;
 		}
-
-		mBuffer.update(output, blockSize);
+		resizeNearestNeighbor(resizeOutputBuffer, newSize, output, blockSize);
 	}
 
 	void setCutoff(float cutoffFrequency)
@@ -70,18 +81,16 @@ public:
 
 	void setLength(float length)
 	{
-		mLength = length;
-		const auto lengthInt = static_cast<size_t>(mLength);
-
-		mBuffer.resize(lengthInt + 1);
-		mOffset = mLength - lengthInt;
+		mOldLength = mNewLength;
+		mNewLength = length;
 	}
 
 private:
 	DSPFilters::Butterworth mFilter{20000.f, 48000.f};
-	RingBuffer mBuffer;
+	DelayLine<float, MAX_DELAY_LENGTH> mDelay;
 	float mGain = 0.95f;
-	float mLength;
+	float mOldLength;
+	float mNewLength;
 	float mOffset;
 };
 
@@ -97,7 +106,7 @@ public:
 		for (unsigned int i = 0u; i < mCurrentNumDelays; ++i)
 		{
 			constexpr auto gain = 0.9f;
-			mDelays.emplace_back(i, MAX_DELAY_LENGTH, gain, kResamplingBuffer);
+			mDelays.emplace_back(MAX_DELAY_LENGTH, gain);
 		}
 		setLength(500);
 	}
@@ -193,5 +202,5 @@ private:
 	size_t mMaxRoomSize;
 	size_t mCurrentRoomSize;
 
-	std::vector<Delay> mDelays;
+	std::vector<BucketBrigadeDelay> mDelays;
 };
