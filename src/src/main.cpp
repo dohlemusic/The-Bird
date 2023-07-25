@@ -17,7 +17,7 @@ PedalState currentState = PedalState::RUNNING;
 
 constexpr float maxCutoffFrequency = 20000.f;
 constexpr float minCutoffFrequency = 500.f;
-constexpr long refreshMs = 10;
+constexpr long refreshMs = 20;
 constexpr float refreshRate = 1.f / (refreshMs * 0.001f);
 constexpr float refreshPeriod = 1.f / refreshRate;
 constexpr long readResolution = 16;
@@ -32,9 +32,10 @@ DSPFilters::Butterworth kKnobRoomSizeSmoothing{ 2.f, 50.f };
 DSPFilters::Butterworth kKnobSpreadSmoothing{ 2.f, 50.f };
 DSPFilters::Butterworth kKnobFrequencySmoothing{ 2.f, 50.f };
 
-AntiJitterFilter kKnobRoomSizeAntiJitter(0.001f);
-AntiJitterFilter kKnobSpreadAntiJitter(0.001f);
-AntiJitterFilter kKnobFrequencyAntiJitter(0.001f);
+const float maxJitterAmount = 0.0007f;
+AntiJitterFilter kKnobRoomSizeAntiJitter(maxJitterAmount);
+AntiJitterFilter kKnobSpreadAntiJitter(maxJitterAmount);
+AntiJitterFilter kKnobFrequencyAntiJitter(maxJitterAmount);
 
 DaisyHardware hw;
 TankVerb tankVerb;
