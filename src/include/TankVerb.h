@@ -1,21 +1,19 @@
 #pragma once
 #include <vector>
 
-#include "filters/ButterworthLPF.h"
+#include <DaisyDSP.h>
+
 #include "RingBuffer.h"
 
 static constexpr size_t AUDIO_BLOCK_SIZE = 360;
 static constexpr size_t NUM_DELAYS = 4;
 static constexpr size_t MAX_DELAY_LENGTH = 16384;
-static constexpr size_t MAX_BUFFER_LENGTH = 4800;
+static constexpr size_t MAX_RESAMPLE_LENGTH = 8192;
 
 // Fast tanh from https://varietyofsound.wordpress.com/2011/02/14/efficient-tanh-computation-using-lamberts-continued-fraction/
 inline float softClip(float sample)
 {
-	float x2 = sample * sample;
-	float a = sample * (135135.0f + x2 * (17325.0f + x2 * (378.0f + x2)));
-	float b = 135135.0f + x2 * (62370.0f + x2 * (3150.0f + x2 * 28.0f));
-	return a / b;
+	return sample - 0.333333f * sample * sample * sample;
 }
 
 float lerp(float x, float x0, float x1, float y0, float y1)
@@ -40,6 +38,7 @@ class BucketBrigadeDelay
 public:
 	BucketBrigadeDelay()
 	{
+		mFilter.Init(48000);
 		setGain(0.5f);
 		setLength(MAX_DELAY_LENGTH);
 	}
@@ -47,8 +46,8 @@ public:
 	void update(const float* input, float* output, size_t blockSize)
 	{
 		size_t newSize = (MAX_DELAY_LENGTH / mNewLength) * blockSize;		
-		if(newSize >= MAX_BUFFER_LENGTH) {
-			newSize = MAX_BUFFER_LENGTH -1;
+		if(newSize >= MAX_RESAMPLE_LENGTH) {
+			newSize = MAX_RESAMPLE_LENGTH -1;
 		}
 		if(newSize < blockSize) {
 			newSize = blockSize;
@@ -70,8 +69,9 @@ public:
 
 			// linear interpolation is used to avoid "digitally" sounding artifacts
 			const float inputInterpolated = lerp(currentFractionalIdx, currentIdx, currentIdx + 1, input[currentIdx], input[currentIdx + 1]);
-
-			float out = mFilter.update(softClip(mDelay.read()));
+			
+			float in = softClip(mDelay.read());
+			float out = mFilter.Process(in);
 			mDelay.write(inputInterpolated + out * mGain);
 			float average = (inputInterpolated + out) * .5f;
 
@@ -82,7 +82,7 @@ public:
 
 	void setCutoff(float cutoffFrequency)
 	{
-		mFilter.setCutoff(cutoffFrequency);
+		mFilter.SetFreq(cutoffFrequency);
 	}
 
 	bool setGain(float gain) {
@@ -101,7 +101,7 @@ public:
 	}
 
 private:
-	DSPFilters::Butterworth mFilter{20000.f, 48000.f};
+	daisysp::Tone mFilter;
 	RingBuffer<float, MAX_DELAY_LENGTH> mDelay;
 	float mGain = 0.95f;
 	float mOldLength;

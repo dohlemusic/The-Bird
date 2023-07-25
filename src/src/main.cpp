@@ -3,7 +3,6 @@
 #include <AudioClass.h>
 
 #include "filters/AntiJitterFilter.h"
-#include "filters/ButterworthLPF.h"
 #include "TankVerb.h"
 #include "FootSwitch.h"
 
@@ -17,7 +16,7 @@ PedalState currentState = PedalState::RUNNING;
 
 constexpr float maxCutoffFrequency = 20000.f;
 constexpr float minCutoffFrequency = 500.f;
-constexpr long refreshMs = 20;
+constexpr long refreshMs = 10;
 constexpr float refreshRate = 1.f / (refreshMs * 0.001f);
 constexpr float refreshPeriod = 1.f / refreshRate;
 constexpr long readResolution = 16;
@@ -27,10 +26,6 @@ constexpr int ASSIGN_SW = D22;
 constexpr int EXPRESSION_PIN = A6;
 constexpr int FOOT_SW = D20;
 constexpr int LED_PIN = D19;
-
-DSPFilters::Butterworth kKnobRoomSizeSmoothing{ 2.f, 50.f };
-DSPFilters::Butterworth kKnobSpreadSmoothing{ 2.f, 50.f };
-DSPFilters::Butterworth kKnobFrequencySmoothing{ 2.f, 50.f };
 
 const float maxJitterAmount = 0.0007f;
 AntiJitterFilter kKnobRoomSizeAntiJitter(maxJitterAmount);
@@ -50,10 +45,12 @@ void AudioCallback(float** in, float** out, size_t size) {
 	float osc_out, env_out;
 	if(footSwitch.getToggleState())
 	{
+		DAISY.SetAudioBlockSize(AUDIO_BLOCK_SIZE);
 		tankVerb.update(in[1], out[1], size);
 		out[0] = out[1];
 	} else
 	{
+		DAISY.SetAudioBlockSize(64);
 		out[0] = in[0];
 		out[1] = in[1];
 	}
@@ -82,20 +79,15 @@ void run() {
 
 	tankVerb.setGain(analogRead(knobPinAssignment[KnobType::FEEDBACK]) / (0.9f * resolutionScaleFactor));
 
-	auto filteredRoomSize = kKnobRoomSizeSmoothing.update(analogRead(knobPinAssignment[KnobType::LENGTH]) / resolutionScaleFactor);
-	filteredRoomSize = kKnobRoomSizeAntiJitter.update(filteredRoomSize);
-
 	float frequency = linToExp(analogRead(knobPinAssignment[KnobType::CUTOFF]) / resolutionScaleFactor);
-	frequency = kKnobFrequencySmoothing.update(frequency);
-	frequency = kKnobFrequencyAntiJitter.update(frequency) * maxCutoffFrequency + minCutoffFrequency;
-	tankVerb.setCutoff(frequency);
+	frequency = linToExp(frequency); //harder slope
+	tankVerb.setCutoff(frequency * maxCutoffFrequency + minCutoffFrequency);
 
-	const float length = linToExp(filteredRoomSize) * MAX_DELAY_LENGTH + AUDIO_BLOCK_SIZE;
+	auto filteredRoomSize = analogRead(knobPinAssignment[KnobType::LENGTH]) / resolutionScaleFactor;
+	const float length = linToExp(filteredRoomSize) * MAX_DELAY_LENGTH + 0.1f * MAX_DELAY_LENGTH;
 	tankVerb.setLength(length);
 
-	auto filteredSpread = kKnobSpreadSmoothing.update(analogRead(knobPinAssignment[KnobType::SPREAD]) / resolutionScaleFactor);
-	filteredSpread = kKnobSpreadAntiJitter.update(filteredSpread);
-	
+	auto filteredSpread = analogRead(knobPinAssignment[KnobType::SPREAD]) / resolutionScaleFactor;
 	tankVerb.setSpread(filteredSpread);
 }
 
