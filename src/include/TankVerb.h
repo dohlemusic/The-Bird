@@ -8,8 +8,7 @@
 static constexpr size_t AUDIO_BLOCK_SIZE = 360;
 static constexpr size_t NUM_DELAYS = 4;
 static constexpr size_t MAX_DELAY_LENGTH = 16384;
-static constexpr size_t MAX_BUFFER_LENGTH = 5000;
-float resizeInputBuffer[MAX_BUFFER_LENGTH];
+static constexpr size_t MAX_BUFFER_LENGTH = 8000;
 float resizeOutputBuffer[MAX_BUFFER_LENGTH];
 
 // Very similar to tanh in <-1, 1> range and decaying to 0 outside of that range
@@ -35,6 +34,7 @@ inline bool resizeNearestNeighbor(const float* current, size_t currentSize, floa
 	return true;
 }
 
+
 class BucketBrigadeDelay 
 {
 public:
@@ -56,13 +56,19 @@ public:
 		if(newSize < blockSize) {
 			newSize = blockSize;
 		}
-		resizeNearestNeighbor(input, blockSize, resizeInputBuffer, newSize);
-		Serial.print(newSize);
+
+		const float inputOutputScaleFactor = static_cast<float>(blockSize) / static_cast<float>(newSize);
 		for(int i=0; i<newSize; ++i) {
+			const float currentFractionalIdx = i * inputOutputScaleFactor;
+			const int currentIdx = static_cast<size_t>(currentFractionalIdx);
+			
+			// linear interpolation is used to avoid "digitally" sounding artifacts
+			const float inputInterpolated = lerp(currentFractionalIdx, currentIdx, currentIdx + 1, input[currentIdx], input[currentIdx + 1]);
 			float out = softClip(mDelay.read());
 			out = mFilter.Process(out);
-			mDelay.write(resizeInputBuffer[i] + out * mGain);
-			float average = (resizeInputBuffer[i] + out) * .5f;
+			mDelay.write(inputInterpolated + out * mGain);
+			float average = (inputInterpolated + out) * .5f;
+
 			resizeOutputBuffer[i] = average;
 		}
 		resizeNearestNeighbor(resizeOutputBuffer, newSize, output, blockSize);
