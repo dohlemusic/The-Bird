@@ -8,9 +8,9 @@
 static constexpr size_t AUDIO_BLOCK_SIZE = 360;
 static constexpr size_t NUM_DELAYS = 4;
 static constexpr size_t MAX_DELAY_LENGTH = 16384;
-static constexpr size_t MAX_RESAMPLE_LENGTH = 8192;
+static constexpr size_t MAX_RESAMPLE_LENGTH = 10000;
 
-// Fast tanh from https://varietyofsound.wordpress.com/2011/02/14/efficient-tanh-computation-using-lamberts-continued-fraction/
+// Very similar to tanh in <-1, 1> range and decaying to 0 outside of that range
 inline float softClip(float sample)
 {
 	return sample - 0.333333f * sample * sample * sample;
@@ -52,8 +52,7 @@ public:
 		if(newSize < blockSize) {
 			newSize = blockSize;
 		}
-
-		const float inputOutputScaleFactor = static_cast<float>(blockSize) / static_cast<float>(newSize);
+		mIsReset = false;
 
 		// rather than changing the actual delay line length, we just resample
 		// the input and output, simulating change of clock speed in BBD delay
@@ -62,7 +61,10 @@ public:
 		// 1. resize input to newSize
 		// 2. write input to delay line and read from delay line to output
 		// 3. resize output from newSize back to blockSize
-
+		const float inputOutputScaleFactor = static_cast<float>(blockSize) / static_cast<float>(newSize);
+		float indexSum = 0;
+		float sum = 0;
+		int prevIdx = 0;
 		for(int i=0; i<newSize; ++i) {
 			const float currentFractionalIdx = i * inputOutputScaleFactor;
 			const int currentIdx = static_cast<size_t>(currentFractionalIdx);
@@ -75,10 +77,29 @@ public:
 			mDelay.write(inputInterpolated + out * mGain);
 			float average = (inputInterpolated + out) * .5f;
 
-			// using linear interpolation here wouldn't have much impact on sound quality, but would hinder performance
-			output[currentIdx] = average;
+			if(currentIdx > prevIdx)
+			{
+				output[prevIdx] = sum / indexSum;
+				sum = 0;
+				indexSum = 0;
+				prevIdx = currentIdx;
+			}
+			sum += average;
+			++indexSum;
+		}
+		output[blockSize - 1] = sum / indexSum;
+	}
+
+	void reset() {
+		if(!mIsReset) {
+			mDelay.reset();
+			mIsReset = true;
 		}
 	}
+
+    bool isReset() {
+        return mIsReset;
+    }
 
 	void setCutoff(float cutoffFrequency)
 	{
@@ -101,6 +122,7 @@ public:
 	}
 
 private:
+	bool mIsReset = true;
 	daisysp::Tone mFilter;
 	RingBuffer<float, MAX_DELAY_LENGTH> mDelay;
 	float mGain = 0.95f;
@@ -141,22 +163,31 @@ public:
 
 	void setLength(unsigned length)
 	{
-		if (length > mMaxRoomSize)
+		if (length >= mMaxRoomSize)
 		{
-			return;
+			length = mMaxRoomSize - 1;
 		}
+
+		// disable one delay line at very short delay length to save CPU
+		if(length < 0.075f * MAX_DELAY_LENGTH) {
+			mDelays.back().reset();
+			setNumDelays(mMaxDelayNumber - 1);
+		}
+		else {
+			setNumDelays(mMaxDelayNumber);
+		}
+		
 		mCurrentRoomSize = length;
 
 		const unsigned scaleFactor = mMaxDelayNumber > 1u ? (length - mMinLength) / (mMaxDelayNumber - 1u) : 1u;
-
-		// avoid resizing all at once to save performance
-		mDelays[mIndexToResize].setLength(mCurrentRoomSize - mIndexToResize * scaleFactor);
-		mIndexToResize = (mIndexToResize + 1) % mCurrentNumDelays;
+		for(int i=0; i<mMaxDelayNumber; ++i) {
+			mDelays[i].setLength(mCurrentRoomSize - i * scaleFactor);
+		}
 	}
 
 	void setGain(float gain)
 	{
-		for (unsigned int i = 0u; i < mCurrentNumDelays; ++i) {
+		for (unsigned int i = 0u; i < mMaxDelayNumber; ++i) {
 			mDelays[i].setGain(gain);
 		}
 	}
@@ -173,9 +204,9 @@ public:
 		{
 			mMinLength = AUDIO_BLOCK_SIZE;
 		}
-		//setLength(mCurrentRoomSize);
 	}
 
+	float tmp[AUDIO_BLOCK_SIZE];
 	void update(const float* const input, float* output, unsigned count)
 	{
 		if (input == nullptr || output == nullptr || count != AUDIO_BLOCK_SIZE)
@@ -183,23 +214,16 @@ public:
 			return;
 		}
 
-		float sum[AUDIO_BLOCK_SIZE] = { 0 };
-
-		for (size_t d = 0; d < mMaxDelayNumber; ++d)
+		memset(output, 0.f, AUDIO_BLOCK_SIZE * sizeof(float));
+		const float denominator = 1.f / static_cast<float>(mCurrentNumDelays);
+		for (size_t d = 0; d < mCurrentNumDelays; ++d)
 		{
-			float tmp[AUDIO_BLOCK_SIZE];
 			mDelays[d].update(input, tmp, AUDIO_BLOCK_SIZE);
 
 			for (size_t i = 0; i < AUDIO_BLOCK_SIZE; ++i)
 			{
-				sum[i] += tmp[i] / static_cast<float>(mMaxDelayNumber);
+				output[i] += tmp[i] * denominator;
 			}
-		}
-
-
-		for (size_t i = 0; i < AUDIO_BLOCK_SIZE; ++i)
-		{
-			output[i] = sum[i];
 		}
 	}
 
@@ -208,7 +232,6 @@ private:
 	unsigned int mCurrentNumDelays;
 	unsigned int mMaxDelayNumber;
 	unsigned int mMinLength = AUDIO_BLOCK_SIZE;
-	size_t mIndexToResize = 0;
 	size_t mMaxRoomSize;
 	size_t mCurrentRoomSize;
 

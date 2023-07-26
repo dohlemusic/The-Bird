@@ -26,10 +26,7 @@ class RingBuffer
     */
     void reset()
     {
-        for(size_t i = 0; i < max_size; i++)
-        {
-            mBuffer[i] = T(0);
-        }
+        memset(mBuffer, 0, max_size);
         mWriteIndex = 0;
     }
 
