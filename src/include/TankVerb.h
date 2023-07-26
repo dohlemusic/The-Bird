@@ -8,7 +8,9 @@
 static constexpr size_t AUDIO_BLOCK_SIZE = 360;
 static constexpr size_t NUM_DELAYS = 4;
 static constexpr size_t MAX_DELAY_LENGTH = 16384;
-static constexpr size_t MAX_RESAMPLE_LENGTH = 10000;
+static constexpr size_t MAX_BUFFER_LENGTH = 5000;
+float resizeInputBuffer[MAX_BUFFER_LENGTH];
+float resizeOutputBuffer[MAX_BUFFER_LENGTH];
 
 // Very similar to tanh in <-1, 1> range and decaying to 0 outside of that range
 inline float softClip(float sample)
@@ -45,49 +47,25 @@ public:
 
 	void update(const float* input, float* output, size_t blockSize)
 	{
+		// rather than changing the actual delay line length, we just resample
+		// the input and output, simulating change of clock speed in BBD delay
 		size_t newSize = (MAX_DELAY_LENGTH / mNewLength) * blockSize;		
-		if(newSize >= MAX_RESAMPLE_LENGTH) {
-			newSize = MAX_RESAMPLE_LENGTH -1;
+		if(newSize >= MAX_BUFFER_LENGTH) {
+			newSize = MAX_BUFFER_LENGTH -1;
 		}
 		if(newSize < blockSize) {
 			newSize = blockSize;
 		}
-		mIsReset = false;
-
-		// rather than changing the actual delay line length, we just resample
-		// the input and output, simulating change of clock speed in BBD delay
-		// the loop is optimized
-		// the original concept is:
-		// 1. resize input to newSize
-		// 2. write input to delay line and read from delay line to output
-		// 3. resize output from newSize back to blockSize
-		const float inputOutputScaleFactor = static_cast<float>(blockSize) / static_cast<float>(newSize);
-		float indexSum = 0;
-		float sum = 0;
-		int prevIdx = 0;
+		resizeNearestNeighbor(input, blockSize, resizeInputBuffer, newSize);
+		Serial.print(newSize);
 		for(int i=0; i<newSize; ++i) {
-			const float currentFractionalIdx = i * inputOutputScaleFactor;
-			const int currentIdx = static_cast<size_t>(currentFractionalIdx);
-
-			// linear interpolation is used to avoid "digitally" sounding artifacts
-			const float inputInterpolated = lerp(currentFractionalIdx, currentIdx, currentIdx + 1, input[currentIdx], input[currentIdx + 1]);
-			
-			float in = softClip(mDelay.read());
-			float out = mFilter.Process(in);
-			mDelay.write(inputInterpolated + out * mGain);
-			float average = (inputInterpolated + out) * .5f;
-
-			if(currentIdx > prevIdx)
-			{
-				output[prevIdx] = sum / indexSum;
-				sum = 0;
-				indexSum = 0;
-				prevIdx = currentIdx;
-			}
-			sum += average;
-			++indexSum;
+			float out = softClip(mDelay.read());
+			out = mFilter.Process(out);
+			mDelay.write(resizeInputBuffer[i] + out * mGain);
+			float average = (resizeInputBuffer[i] + out) * .5f;
+			resizeOutputBuffer[i] = average;
 		}
-		output[blockSize - 1] = sum / indexSum;
+		resizeNearestNeighbor(resizeOutputBuffer, newSize, output, blockSize);
 	}
 
 	void reset() {
@@ -168,14 +146,14 @@ public:
 			length = mMaxRoomSize - 1;
 		}
 
-		// disable one delay line at very short delay length to save CPU
-		if(length < 0.075f * MAX_DELAY_LENGTH) {
-			mDelays.back().reset();
-			setNumDelays(mMaxDelayNumber - 1);
-		}
-		else {
-			setNumDelays(mMaxDelayNumber);
-		}
+		//// disable one delay line at very short delay length to save CPU
+		//if(length < 0.075f * MAX_DELAY_LENGTH) {
+		//	mDelays.back().reset();
+		//	setNumDelays(mMaxDelayNumber - 1);
+		//}
+		//else {
+		//	setNumDelays(mMaxDelayNumber);
+		//}
 		
 		mCurrentRoomSize = length;
 

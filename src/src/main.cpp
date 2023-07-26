@@ -84,7 +84,7 @@ void run() {
 	tankVerb.setCutoff(frequency * maxCutoffFrequency + minCutoffFrequency);
 
 	auto filteredRoomSize = analogRead(knobPinAssignment[KnobType::LENGTH]) / resolutionScaleFactor;
-	const float length = linToExp(filteredRoomSize) * MAX_DELAY_LENGTH + 0.025f * MAX_DELAY_LENGTH;
+	const float length = linToExp(filteredRoomSize) * MAX_DELAY_LENGTH + 0.1f * MAX_DELAY_LENGTH;
 	tankVerb.setLength(length);
 
 	auto filteredSpread = analogRead(knobPinAssignment[KnobType::SPREAD]) / resolutionScaleFactor;
