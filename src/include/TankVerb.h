@@ -1,8 +1,5 @@
 #pragma once
-#include <vector>
-
-#include <DaisyDSP.h>
-
+#include <array>
 #include "RingBuffer.h"
 
 static constexpr float SAMPLE_RATE = 48000;
@@ -49,7 +46,7 @@ class BucketBrigadeDelay
 public:
 	BucketBrigadeDelay()
 	{
-		mFilter.Init(SAMPLE_RATE);
+		//mFilter.Init(SAMPLE_RATE);
 		setGain(0.5f);
 		setLength(MAX_DELAY_LENGTH);
 	}
@@ -92,7 +89,7 @@ public:
 
 	void setCutoff(float cutoffFrequency)
 	{
-		mFilter.SetFreq(cutoffFrequency);
+		//mFilter.SetFreq(cutoffFrequency);
 	}
 
 	bool setGain(float gain) {
@@ -114,7 +111,7 @@ private:
 
 	void updateDelay(float input, float* output, size_t outputIndex) {
             float out = softClip(mDelay.read());
-			out = mFilter.Process(out);
+			//out = mFilter.Process(out);
 			mDelay.write(input + out * mGain);
 			float average = (input + out) * .5f;
 
@@ -122,7 +119,7 @@ private:
 		};
 
 	bool mIsReset = true;
-	daisysp::Tone mFilter;
+	//daisysp::Tone mFilter;
 	RingBuffer<float, MAX_DELAY_LENGTH> mDelay;
 	float mGain = 0.95f;
 	float mOldLength;

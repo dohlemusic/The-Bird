@@ -1,21 +1,20 @@
 #pragma once
+#include "daisy_seed.h"
 
 class FootSwitch
 {
 public:
-	FootSwitch(int pin, int mode, float refreshRate, float division = 4.f)
+	FootSwitch(daisy::GPIO& pin, float refreshRate, float division = 4.f) : mPin(pin)
 	{
 		mRefreshRate = refreshRate;
 		mMult = 1.f/division;
-		mPin = pin;
-		pinMode(pin, mode);
 		mTimerIncrement = refreshRate * mMult;
 	}
 
 	void update()
 	{
 		mTimer += mTimerIncrement;
-		mAccumulator += digitalRead(mPin);
+		mAccumulator += mPin.Read();
 
 		if(mTimer > mRefreshRate)
 		{
@@ -41,7 +40,7 @@ public:
 	}
 
 private:
-	int mPin;
+	daisy::GPIO& mPin;
 	int mAccumulator = 0;
 	bool mLastState = false;
 	bool mToggleState = false;
