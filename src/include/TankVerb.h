@@ -5,11 +5,19 @@
 
 #include "RingBuffer.h"
 
+static constexpr float SAMPLE_RATE = 48000;
 static constexpr size_t AUDIO_BLOCK_SIZE = 360;
+
 static constexpr size_t NUM_DELAYS = 4;
 static constexpr size_t MAX_DELAY_LENGTH = 16384;
-static constexpr size_t MAX_BUFFER_LENGTH = 8000;
+static constexpr size_t MAX_BUFFER_LENGTH = 6200;
 float resizeOutputBuffer[MAX_BUFFER_LENGTH];
+
+// the variables are not used in code, but they let user preview the delay properties in IDE or compile time
+static constexpr float minDelayLengthSeconds = (MAX_DELAY_LENGTH / (float)SAMPLE_RATE) / (MAX_BUFFER_LENGTH / AUDIO_BLOCK_SIZE);
+static constexpr float maxDelayLengthSeconds = (MAX_DELAY_LENGTH / (float)SAMPLE_RATE);
+static constexpr float expansionFactor = maxDelayLengthSeconds / minDelayLengthSeconds;
+
 
 // Very similar to tanh in <-1, 1> range and decaying to 0 outside of that range
 inline float softClip(float sample)
@@ -25,22 +33,23 @@ float lerp(float x, float x0, float x1, float y0, float y1)
 inline bool resizeNearestNeighbor(const float* current, size_t currentSize, float* out, size_t newSize)
 {
 	const float scaleFactor = static_cast<float>(currentSize) / static_cast<float>(newSize);
-	for (size_t outIdx = 0; outIdx < newSize; ++outIdx)
+	for (size_t outIdx = 0; outIdx < newSize - 1; ++outIdx)
 	{
 		const float currentFractionalIdx = outIdx * scaleFactor;
 		const int currentIdx = static_cast<size_t>(currentFractionalIdx);
 		out[outIdx] = lerp(currentFractionalIdx, currentIdx, currentIdx + 1, current[currentIdx], current[currentIdx + 1]); // current[currentIdx]; 
 	}
+
+	out[newSize - 1] = current[currentSize - 1];
 	return true;
 }
-
 
 class BucketBrigadeDelay 
 {
 public:
 	BucketBrigadeDelay()
 	{
-		mFilter.Init(48000);
+		mFilter.Init(SAMPLE_RATE);
 		setGain(0.5f);
 		setLength(MAX_DELAY_LENGTH);
 	}
@@ -58,19 +67,15 @@ public:
 		}
 
 		const float inputOutputScaleFactor = static_cast<float>(blockSize) / static_cast<float>(newSize);
-		for(int i=0; i<newSize; ++i) {
+		for(int i=0; i<newSize - 1; ++i) {
 			const float currentFractionalIdx = i * inputOutputScaleFactor;
 			const int currentIdx = static_cast<size_t>(currentFractionalIdx);
-			
-			// linear interpolation is used to avoid "digitally" sounding artifacts
 			const float inputInterpolated = lerp(currentFractionalIdx, currentIdx, currentIdx + 1, input[currentIdx], input[currentIdx + 1]);
-			float out = softClip(mDelay.read());
-			out = mFilter.Process(out);
-			mDelay.write(inputInterpolated + out * mGain);
-			float average = (inputInterpolated + out) * .5f;
-
-			resizeOutputBuffer[i] = average;
+			updateDelay(inputInterpolated, resizeOutputBuffer, i);
 		}
+		// we can't go to the last index, because lerp would read outside of input array bounds, so the last element gets simply copied
+		updateDelay(input[blockSize - 1], resizeOutputBuffer, newSize - 1);
+
 		resizeNearestNeighbor(resizeOutputBuffer, newSize, output, blockSize);
 	}
 
@@ -106,6 +111,16 @@ public:
 	}
 
 private:
+
+	void updateDelay(float input, float* output, size_t outputIndex) {
+            float out = softClip(mDelay.read());
+			out = mFilter.Process(out);
+			mDelay.write(input + out * mGain);
+			float average = (input + out) * .5f;
+
+			output[outputIndex] = average;
+		};
+
 	bool mIsReset = true;
 	daisysp::Tone mFilter;
 	RingBuffer<float, MAX_DELAY_LENGTH> mDelay;
