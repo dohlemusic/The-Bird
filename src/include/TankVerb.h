@@ -11,8 +11,7 @@ static constexpr size_t AUDIO_BLOCK_SIZE = 360;
 static constexpr size_t NUM_DELAYS = 4;
 static constexpr size_t MAX_DELAY_LENGTH = 16384;
 static constexpr size_t MAX_BUFFER_LENGTH = 6200;
-float resizeOutputBuffer[MAX_BUFFER_LENGTH];
-float resizeInputBuffer[MAX_BUFFER_LENGTH];
+float resizeBuffer[MAX_BUFFER_LENGTH];
 
 // the variables are not used in code, but they let user preview the delay properties in IDE or compile time
 static constexpr float minDelayLengthSeconds = (MAX_DELAY_LENGTH / (float)SAMPLE_RATE) / (MAX_BUFFER_LENGTH / AUDIO_BLOCK_SIZE);
@@ -83,12 +82,12 @@ public:
 
 		memcpy(mExtendedInput + extraSize, input, AUDIO_BLOCK_SIZE * sizeof(float));
 		mExtendedInput[0] = mPrevIn;
-		resizeNearestNeighbor(mExtendedInput, blockSize, resizeInputBuffer, newSize);
+		resizeNearestNeighbor(mExtendedInput, blockSize, resizeBuffer, newSize);
 		for (int i = 0; i < newSize; ++i)
 		{
-			updateDelay(resizeInputBuffer[i], resizeInputBuffer, i);
+			updateDelay(resizeBuffer[i], resizeBuffer, i);
 		}
-		resizeNearestNeighbor(resizeInputBuffer, newSize, output, blockSize, true);
+		resizeNearestNeighbor(resizeBuffer, newSize, output, blockSize, true);
 		mPrevIn = input[AUDIO_BLOCK_SIZE - 1];
 	}
 
@@ -134,9 +133,9 @@ private:
 		float out = softClip(mDelay.read());
 		out = mFilter.Process(out);
 		mDelay.write(input + out * mGain);
-		float average = (input + out) * .5f;
+		float dryWetMix = (input + out) * .5f;
 
-		output[outputIndex] = average;
+		output[outputIndex] = dryWetMix;
 	};
 
 	bool mIsReset = true;
@@ -147,8 +146,8 @@ private:
 	float mNewLength;
 	float mOffset;
 
-	// introduces one or more samplse of extra delay
-	// to avoid problems with interpolation overruning the input samples array
+	// introduces one or more sample of extra delay to avoid problems with
+	// interpolation overruning the input samples array [see update(...)]
 	float mPrevIn = 0;
 	static constexpr size_t extraSize = 1;
 	float mExtendedInput[AUDIO_BLOCK_SIZE + extraSize];
