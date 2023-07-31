@@ -10,13 +10,14 @@ static constexpr size_t AUDIO_BLOCK_SIZE = 360;
 
 static constexpr size_t NUM_DELAYS = 4;
 static constexpr size_t MAX_DELAY_LENGTH = 16384;
-static constexpr size_t MAX_BUFFER_LENGTH = 6200;
+static constexpr size_t MAX_BUFFER_LENGTH = 8000;
 float resizeBuffer[MAX_BUFFER_LENGTH];
 
 // the variables are not used in code, but they let user preview the delay properties in IDE or compile time
 static constexpr float minDelayLengthSeconds = (MAX_DELAY_LENGTH / (float)SAMPLE_RATE) / (MAX_BUFFER_LENGTH / AUDIO_BLOCK_SIZE);
 static constexpr float maxDelayLengthSeconds = (MAX_DELAY_LENGTH / (float)SAMPLE_RATE);
 static constexpr float expansionFactor = maxDelayLengthSeconds / minDelayLengthSeconds;
+static constexpr size_t MIN_DELAY_LENGTH = MAX_DELAY_LENGTH / expansionFactor;
 
 // Very similar to tanh in <-1, 1> range and decaying to 0 outside of that range
 inline float softClip(float sample)
@@ -70,7 +71,7 @@ public:
 	{
 		// rather than changing the actual delay line length, we just resample
 		// the input and output, simulating change of clock speed in BBD delay
-		size_t newSize = (MAX_DELAY_LENGTH / mNewLength) * blockSize;
+		size_t newSize = (MAX_DELAY_LENGTH / mLength) * blockSize;
 		if (newSize >= MAX_BUFFER_LENGTH)
 		{
 			newSize = MAX_BUFFER_LENGTH - 1;
@@ -123,8 +124,7 @@ public:
 
 	void setLength(float length)
 	{
-		mOldLength = mNewLength;
-		mNewLength = length;
+		mLength = length;
 	}
 
 private:
@@ -142,8 +142,7 @@ private:
 	daisysp::Tone mFilter;
 	RingBuffer<float, MAX_DELAY_LENGTH> mDelay;
 	float mGain = 0.95f;
-	float mOldLength;
-	float mNewLength;
+	float mLength;
 	float mOffset;
 
 	// introduces one or more sample of extra delay to avoid problems with
@@ -189,15 +188,6 @@ public:
 			length = mMaxRoomSize - 1;
 		}
 
-		//// disable one delay line at very short delay length to save CPU
-		// if(length < 0.075f * MAX_DELAY_LENGTH) {
-		//	mDelays.back().reset();
-		//	setNumDelays(mMaxDelayNumber - 1);
-		// }
-		// else {
-		//	setNumDelays(mMaxDelayNumber);
-		// }
-
 		mCurrentRoomSize = length;
 
 		const unsigned scaleFactor = mMaxDelayNumber > 1u ? (length - mMinLength) / (mMaxDelayNumber - 1u) : 1u;
@@ -216,17 +206,11 @@ public:
 	}
 
 	void setSpread(float spread)
-	{
-		if (spread < 0.f || spread > 1.f)
-		{
-			return;
-		}
+	{	
+		if(spread > 1.0) spread = 1.0;
+		if(spread < 0.0) spread = 0.0;
 
 		mMinLength = spread * mCurrentRoomSize;
-		if (mMinLength < AUDIO_BLOCK_SIZE)
-		{
-			mMinLength = AUDIO_BLOCK_SIZE;
-		}
 	}
 
 	float tmp[AUDIO_BLOCK_SIZE];

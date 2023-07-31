@@ -36,6 +36,12 @@ DaisyHardware hw;
 TankVerb tankVerb;
 FootSwitch footSwitch(FOOT_SW, INPUT_PULLDOWN, refreshRate);
 
+template <class T>
+T remap(T in, T inMin, T inMax, T outMin, T outMax)
+{
+  return (in - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+}
+
 float linToExp(float value)
 {
 	return expf(2 * value - 1.854) - 0.1565;
@@ -63,7 +69,7 @@ void setup() {
 
 	analogReadResolution(readResolution);
 
-	// Initialize for Daisy pod at 48kHz
+	// Initialize for Daisy seed at 48kHz
 	hw = DAISY.init(DAISY_SEED, AUDIO_SR_48K);
 	DAISY.SetAudioBlockSize(AUDIO_BLOCK_SIZE);
 	DAISY.begin(AudioCallback);
@@ -79,16 +85,18 @@ void run() {
 
 	tankVerb.setGain(analogRead(knobPinAssignment[KnobType::FEEDBACK]) / (0.9f * resolutionScaleFactor));
 
-	float frequency = linToExp(analogRead(knobPinAssignment[KnobType::CUTOFF]) / resolutionScaleFactor);
-	frequency = linToExp(frequency); //harder slope
-	tankVerb.setCutoff(frequency * maxCutoffFrequency + minCutoffFrequency);
+	float cutoff = linToExp(analogRead(knobPinAssignment[KnobType::CUTOFF]) / resolutionScaleFactor);
+	cutoff = linToExp(cutoff); //harder slope
+	tankVerb.setCutoff(cutoff * maxCutoffFrequency + minCutoffFrequency);
 
-	auto filteredRoomSize = analogRead(knobPinAssignment[KnobType::LENGTH]) / resolutionScaleFactor;
-	const float length = linToExp(filteredRoomSize) * MAX_DELAY_LENGTH;
+	float length = analogRead(knobPinAssignment[KnobType::LENGTH]) / resolutionScaleFactor;
+	length = linToExp(length);
+	length = remap(length, 0.f, 1.f, (float)MIN_DELAY_LENGTH, (float)MAX_DELAY_LENGTH);
 	tankVerb.setLength(length);
 
-	auto filteredSpread = analogRead(knobPinAssignment[KnobType::SPREAD]) / resolutionScaleFactor;
-	tankVerb.setSpread(filteredSpread + 0.01f);
+	auto spread = analogRead(knobPinAssignment[KnobType::SPREAD]) / resolutionScaleFactor;
+	// add some extra value, because potentiometers rarely read their max possible value and we'd be missing out on a cool sound effect otherwise
+	tankVerb.setSpread(spread + 0.02);
 }
 
 void assignPedal() {
