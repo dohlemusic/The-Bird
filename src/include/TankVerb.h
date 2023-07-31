@@ -34,27 +34,17 @@ float lerp(float x, float y0, float y1)
 // unless preventOverrun is set to true, current array size must be at least 1 bigger than currentSize
 // otherwise, the last iteration of the resize loop will try to access an element outside the input array bounds to interpolate
 // preventOverrun prevents this by iterating until currentSize-1 and copying the last element of current into the last element of out
-inline bool resizeNearestNeighbor(const float *current, size_t currentSize, float *out, size_t newSize, bool preventOverrun = false)
+inline bool resizeNearestNeighbor(const float *current, size_t currentSize, float *out, size_t newSize)
 {
 	const float scaleFactor = static_cast<float>(currentSize) / static_cast<float>(newSize);
 
-	size_t targetSize = newSize;
-	if (preventOverrun)
-	{
-		--targetSize;
-	}
-
-	for (size_t outIdx = 0; outIdx < targetSize; ++outIdx)
+	for (size_t outIdx = 0; outIdx < newSize; ++outIdx)
 	{
 		const float currentFractionalIdx = outIdx * scaleFactor;
 		const int currentIdx = static_cast<size_t>(currentFractionalIdx);
 		out[outIdx] = lerp(currentFractionalIdx - currentIdx, current[currentIdx], current[currentIdx + 1]);
 	}
 
-	if (preventOverrun)
-	{
-		out[newSize - 1] = current[currentSize - 1];
-	}
 	return true;
 }
 
@@ -97,7 +87,7 @@ public:
 		resizeOutputBuffer[0] = mPrevOut;
 		resizeNearestNeighbor(resizeOutputBuffer, newSize, output, blockSize);
 		mPrevIn = input[AUDIO_BLOCK_SIZE - 1];
-		mPrevOut = resizeOutputBuffer[newSize ];
+		mPrevOut = resizeOutputBuffer[newSize];
 	}
 
 	void reset()
