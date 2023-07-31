@@ -12,6 +12,7 @@ static constexpr size_t NUM_DELAYS = 4;
 static constexpr size_t MAX_DELAY_LENGTH = 16384;
 static constexpr size_t MAX_BUFFER_LENGTH = 8000;
 float resizeBuffer[MAX_BUFFER_LENGTH];
+float resizeOutputBuffer[MAX_BUFFER_LENGTH];
 
 // the variables are not used in code, but they let user preview the delay properties in IDE or compile time
 static constexpr float minDelayLengthSeconds = (MAX_DELAY_LENGTH / (float)SAMPLE_RATE) / (MAX_BUFFER_LENGTH / AUDIO_BLOCK_SIZE);
@@ -86,10 +87,17 @@ public:
 		resizeNearestNeighbor(mExtendedInput, blockSize, resizeBuffer, newSize);
 		for (int i = 0; i < newSize; ++i)
 		{
-			updateDelay(resizeBuffer[i], resizeBuffer, i);
+			float out = softClip(mDelay.read());
+			out = mFilter.Process(out);
+			mDelay.write(resizeBuffer[i] + out * mGain);
+			float dryWetMix = (resizeBuffer[i] + out) * .5f;
+
+			resizeOutputBuffer[i + 1] = dryWetMix;
 		}
-		resizeNearestNeighbor(resizeBuffer, newSize, output, blockSize, true);
+		resizeOutputBuffer[0] = mPrevOut;
+		resizeNearestNeighbor(resizeOutputBuffer, newSize, output, blockSize);
 		mPrevIn = input[AUDIO_BLOCK_SIZE - 1];
+		mPrevOut = resizeOutputBuffer[newSize ];
 	}
 
 	void reset()
@@ -128,16 +136,6 @@ public:
 	}
 
 private:
-	void updateDelay(float input, float *output, size_t outputIndex)
-	{
-		float out = softClip(mDelay.read());
-		out = mFilter.Process(out);
-		mDelay.write(input + out * mGain);
-		float dryWetMix = (input + out) * .5f;
-
-		output[outputIndex] = dryWetMix;
-	};
-
 	bool mIsReset = true;
 	daisysp::Tone mFilter;
 	RingBuffer<float, MAX_DELAY_LENGTH> mDelay;
@@ -148,6 +146,7 @@ private:
 	// introduces one or more sample of extra delay to avoid problems with
 	// interpolation overruning the input samples array [see update(...)]
 	float mPrevIn = 0;
+	float mPrevOut = 0;
 	static constexpr size_t extraSize = 1;
 	float mExtendedInput[AUDIO_BLOCK_SIZE + extraSize];
 };
@@ -206,9 +205,11 @@ public:
 	}
 
 	void setSpread(float spread)
-	{	
-		if(spread > 1.0) spread = 1.0;
-		if(spread < 0.0) spread = 0.0;
+	{
+		if (spread > 1.0)
+			spread = 1.0;
+		if (spread < 0.0)
+			spread = 0.0;
 
 		mMinLength = spread * mCurrentRoomSize;
 	}
