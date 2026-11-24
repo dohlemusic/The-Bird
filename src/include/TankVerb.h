@@ -55,90 +55,93 @@ public:
 	{
 		mFilter.Init(SAMPLE_RATE);
 		setGain(0.5f);
-		setLength(MAX_DELAY_LENGTH);
+		setLength(MAX_DELAY_LENGTH - 4);
+		mDelay = mTarget;
+	}
+
+	// length in samples at the audio rate
+	void setLength(float samples)
+	{
+		mTarget = std::clamp(samples, kMinDelay, (float)(BUF_SIZE - 4));
+	}
+
+	void setCutoff(float hz) { mUserCutoff = hz; }
+
+	bool setGain(float g)
+	{
+		if (g > 1.1f) return false;
+		mGain = g;
+		return true;
 	}
 
 	void update(const float *input, float *output, size_t blockSize)
 	{
-		// rather than changing the actual delay line length, we just resample
-		// the input and output, simulating change of clock speed in BBD delay
-		size_t newSize = (MAX_DELAY_LENGTH / mLength) * blockSize;
-		if (newSize >= MAX_BUFFER_LENGTH)
-		{
-			newSize = MAX_BUFFER_LENGTH - 1;
-		}
-		if (newSize < blockSize)
-		{
-			newSize = blockSize;
-		}
+		updateFilter(); // once per block is plenty
 
-		memcpy(mExtendedInput + extraSize, input, AUDIO_BLOCK_SIZE * sizeof(float));
-		mExtendedInput[0] = mPrevIn;
-		resizeNearestNeighbor(mExtendedInput, blockSize, resizeBuffer, newSize);
-		for (int i = 0; i < newSize; ++i)
+		for (size_t i = 0; i < blockSize; ++i)
 		{
-			float out = softClip(mDelay.read());
-			out = mFilter.Process(out);
-			mDelay.write(resizeBuffer[i] + out * mGain);
-			float dryWetMix = (resizeBuffer[i] + out) * .5f;
+			// Slew-limited delay time: this IS the BBD pitch bend.
+			float step = (mTarget - mDelay) * kSlew;
+			mDelay += std::clamp(step, -kMaxStep, kMaxStep);
 
-			resizeOutputBuffer[i + 1] = dryWetMix;
+			float wet = readInterp(mDelay);
+			wet = softClip(wet);
+			wet = mFilter.Process(wet);
+
+			mBuf[mWrite] = input[i] + wet * mGain;
+			mWrite = (mWrite + 1) & MASK;
+
+			output[i] = 0.5f * (input[i] + wet);
 		}
-		resizeOutputBuffer[0] = mPrevOut;
-		resizeNearestNeighbor(resizeOutputBuffer, newSize, output, blockSize);
-		mPrevIn = input[AUDIO_BLOCK_SIZE - 1];
-		mPrevOut = resizeOutputBuffer[newSize];
+		mIsReset = false;
 	}
 
 	void reset()
 	{
-		if (!mIsReset)
-		{
-			mDelay.reset();
-			mIsReset = true;
-		}
-	}
-
-	bool isReset()
-	{
-		return mIsReset;
-	}
-
-	void setCutoff(float cutoffFrequency)
-	{
-		mFilter.SetFreq(cutoffFrequency);
-	}
-
-	bool setGain(float gain)
-	{
-		if (gain > 1.1f)
-		{
-			return false;
-		}
-
-		mGain = gain;
-		return true;
-	}
-
-	void setLength(float length)
-	{
-		mLength = length;
+		if (mIsReset) return;
+		std::fill(std::begin(mBuf), std::end(mBuf), 0.f);
+		mFilter.Init(SAMPLE_RATE);
+		mIsReset = true;
 	}
 
 private:
-	bool mIsReset = true;
-	daisysp::Tone mFilter;
-	RingBuffer<float, MAX_DELAY_LENGTH> mDelay;
-	float mGain = 0.95f;
-	float mLength;
-	float mOffset;
+	static constexpr size_t BUF_SIZE = 16384;           // power of two
+	static constexpr size_t MASK = BUF_SIZE - 1;
+	static constexpr float kMinDelay = 2.f;
+	static constexpr float kSlew = 0.0005f;             // ~40 ms time constant
+	static constexpr float kMaxStep = 0.5f;             // caps bend at ~±1 octave
+	static constexpr float kVirtualStages = 4096.f;     // "character", independent of buffer size
 
-	// introduces one or more sample of extra delay to avoid problems with
-	// interpolation overruning the input samples array [see update(...)]
-	float mPrevIn = 0;
-	float mPrevOut = 0;
-	static constexpr size_t extraSize = 1;
-	float mExtendedInput[AUDIO_BLOCK_SIZE + extraSize];
+	static inline float softClip(float x)
+	{
+		x = std::clamp(x, -1.f, 1.f);
+		return 1.5f * (x - x * x * x * (1.f / 3.f));
+	}
+
+	float readInterp(float delay) const
+	{
+		float pos = static_cast<float>(mWrite) - delay;
+		if (pos < 0.f) pos += BUF_SIZE;
+		const size_t i0 = static_cast<size_t>(pos);
+		const float frac = pos - static_cast<float>(i0);
+		return lerp(frac, mBuf[i0 & MASK], mBuf[(i0 + 1) & MASK]);
+	}
+
+	void updateFilter()
+	{
+		const float delaySec = mDelay / SAMPLE_RATE;
+		const float bbdBandwidth = kVirtualStages / (4.f * delaySec);
+		float cutoff = std::min({mUserCutoff, bbdBandwidth, 0.45f * SAMPLE_RATE});
+		mFilter.SetFreq(cutoff);
+	}
+
+	daisysp::Tone mFilter;
+	float mBuf[BUF_SIZE] = {};
+	size_t mWrite = 0;
+	float mDelay = 0, mTarget = 0;
+	float mGain = 0.5f;
+	float mUserCutoff = 20000.f;
+	bool mIsReset = true;
 };
 
 class TankVerb
@@ -182,7 +185,7 @@ public:
 		const unsigned scaleFactor = mMaxDelayNumber > 1u ? (length - mMinLength) / (mMaxDelayNumber - 1u) : 1u;
 		for (int i = 0; i < mMaxDelayNumber; ++i)
 		{
-			mDelays[i].setLength(mCurrentRoomSize - i * scaleFactor);
+			mDelays[i].setLength(mCurrentRoomSize - (i+1) * scaleFactor);
 		}
 	}
 
