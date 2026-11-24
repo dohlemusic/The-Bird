@@ -63,14 +63,13 @@ void AudioCallback(float** in, float** out, size_t size) {
 }
 
 void setup() {
-	Serial.begin(9600);
 	pinMode(LED_PIN, OUTPUT);
 	pinMode(ASSIGN_SW, INPUT_PULLDOWN);
 
 	analogReadResolution(readResolution);
 
 	// Initialize for Daisy seed at 48kHz
-	hw = DAISY.init(DAISY_SEED, AUDIO_SR_48K);
+	hw = DAISY.init(DAISY_SEED, AUDIO_SR_32K);
 	DAISY.SetAudioBlockSize(AUDIO_BLOCK_SIZE);
 	DAISY.begin(AudioCallback);
 }
@@ -83,7 +82,7 @@ void run() {
 		lastKnobState[i] = analogRead(knobDefaultPins[i]);
 	}
 
-	tankVerb.setGain(analogRead(knobPinAssignment[KnobType::FEEDBACK]) / (0.9f * resolutionScaleFactor));
+	tankVerb.setGain(analogRead(knobPinAssignment[KnobType::FEEDBACK]) / (0.99f * resolutionScaleFactor));
 
 	float cutoff = linToExp(analogRead(knobPinAssignment[KnobType::CUTOFF]) / resolutionScaleFactor);
 	cutoff = linToExp(cutoff); //harder slope
@@ -100,6 +99,7 @@ void run() {
 }
 
 void assignPedal() {
+	// Maps the foot pedal to one of the 4 potentiometers. User can select to which potentiometer the pedal is mapped by moving one of the 4 potentiometers.
 	digitalToggle(LED_PIN);
 	for(int i=0; i<KnobType::COUNT; ++i) {
 		knobPinAssignment[i] = knobDefaultPins[i];
@@ -107,8 +107,8 @@ void assignPedal() {
 
 	for(int i=0; i<KnobType::COUNT; ++i) {
 		auto value = abs((long long)analogRead(knobPinAssignment[i]) - (long long)lastKnobState[i]);
-		Serial.println(value);
 		if(value > 0.1f * resolutionScaleFactor) {
+			// If this potentiometer was moved by a significant enough amount, map the foot pedal to this potentiometer
 			knobPinAssignment[i] = EXPRESSION_PIN;
 			currentState = PedalState::RUNNING;
 			return;

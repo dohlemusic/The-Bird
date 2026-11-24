@@ -3,22 +3,12 @@
 
 #include <DaisyDSP.h>
 
-#include "RingBuffer.h"
-
 static constexpr float SAMPLE_RATE = 48000;
-static constexpr size_t AUDIO_BLOCK_SIZE = 360;
+static constexpr size_t AUDIO_BLOCK_SIZE = 256;
 
 static constexpr size_t NUM_DELAYS = 4;
 static constexpr size_t MAX_DELAY_LENGTH = 16384;
-static constexpr size_t MAX_BUFFER_LENGTH = 8000;
-float resizeBuffer[MAX_BUFFER_LENGTH];
-float resizeOutputBuffer[MAX_BUFFER_LENGTH];
-
-// the variables are not used in code, but they let user preview the delay properties in IDE or compile time
-static constexpr float minDelayLengthSeconds = (MAX_DELAY_LENGTH / (float)SAMPLE_RATE) / (MAX_BUFFER_LENGTH / AUDIO_BLOCK_SIZE);
-static constexpr float maxDelayLengthSeconds = (MAX_DELAY_LENGTH / (float)SAMPLE_RATE);
-static constexpr float expansionFactor = maxDelayLengthSeconds / minDelayLengthSeconds;
-static constexpr size_t MIN_DELAY_LENGTH = MAX_DELAY_LENGTH / expansionFactor;
+static constexpr size_t MIN_DELAY_LENGTH = 16;
 
 // Very similar to tanh in <-1, 1> range and decaying to 0 outside of that range
 inline float softClip(float sample)
@@ -105,12 +95,12 @@ public:
 	}
 
 private:
-	static constexpr size_t BUF_SIZE = 16384;           // power of two
+	static constexpr size_t BUF_SIZE = MAX_DELAY_LENGTH; // must be power of two
 	static constexpr size_t MASK = BUF_SIZE - 1;
 	static constexpr float kMinDelay = 2.f;
 	static constexpr float kSlew = 0.0005f;             // ~40 ms time constant
 	static constexpr float kMaxStep = 0.5f;             // caps bend at ~±1 octave
-	static constexpr float kVirtualStages = 4096.f;     // "character", independent of buffer size
+	static constexpr float kVirtualStages = 8192.f;     // "character", independent of buffer size
 
 	static inline float softClip(float x)
 	{
@@ -129,9 +119,7 @@ private:
 
 	void updateFilter()
 	{
-		const float delaySec = mDelay / SAMPLE_RATE;
-		const float bbdBandwidth = kVirtualStages / (4.f * delaySec);
-		float cutoff = std::min({mUserCutoff, bbdBandwidth, 0.45f * SAMPLE_RATE});
+		float cutoff = mUserCutoff; 
 		mFilter.SetFreq(cutoff);
 	}
 
@@ -185,7 +173,7 @@ public:
 		const unsigned scaleFactor = mMaxDelayNumber > 1u ? (length - mMinLength) / (mMaxDelayNumber - 1u) : 1u;
 		for (int i = 0; i < mMaxDelayNumber; ++i)
 		{
-			mDelays[i].setLength(mCurrentRoomSize - (i+1) * scaleFactor);
+			mDelays[i].setLength(mCurrentRoomSize - i * scaleFactor);
 		}
 	}
 
